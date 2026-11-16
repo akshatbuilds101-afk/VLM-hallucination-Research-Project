@@ -1,0 +1,277 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{url}
+\usepackage{graphicx}
+\usepackage{balance}
+\usepackage{microtype}
+\usepackage{enumitem}
+\setlist{nosep,leftmargin=*}
+
+\title{Evaluating Evidence-Based Verification Prompting for Visual Hallucination Under Image Degradation in Vision-Language Models}
+
+\author{\IEEEauthorblockN{Akshat Sajwal, Sameer Mishra, Rakshit Kumar Jha, Ananya Gupta, and Ayush }
+\IEEEauthorblockA{School of Computer Science\\
+University of Petroleum and Energy Studies (UPES), Dehradun, India}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Vision-language models (VLMs) can answer image-grounded questions fluently while asserting objects that are not visually present. This study evaluates whether a lightweight evidence-based verification instruction changes object-presence errors when images are degraded. We use the 500-example test split of POPEv2, which provides paired normal and counterfactual images, and construct five input conditions: original, mild blur, severe blur, mild Gaussian noise, and severe Gaussian noise. One model, Qwen2.5-VL-3B-Instruct, is evaluated with standard and verification prompts, producing 10,000 predictions. Verification increases all-record accuracy from 87.72\% to 89.80\% and reduces the valid-answer false-positive rate from 16.84\% to 10.87\%. The reduction is accompanied by an increase in the false-negative rate from 7.52\% to 9.32\%, indicating a precision--recall trade-off rather than a uniform improvement. Across all five image conditions, counterfactual false-positive incidence is lower under verification; the largest absolute reduction is observed for severe blur. Paired example-level sign-flip permutation tests and cluster-bootstrap confidence intervals support the primary differences. An exploratory metadata-based error classifier has limited discriminative performance and is treated as supplementary rather than as a visual hallucination detector. The findings are limited to one model, one benchmark, and binary object-presence questions.
+\end{abstract}
+
+\begin{IEEEkeywords}
+vision-language models, visual hallucination, object hallucination, POPEv2, image degradation, Gaussian blur, Gaussian noise, verification prompting, robustness
+\end{IEEEkeywords}
+
+\section{Introduction}
+Vision-language models (VLMs) combine visual encoders and language models to answer questions about images, describe scenes, and support multimodal reasoning. Their fluent responses, however, are not always grounded in the supplied image. A model may affirm the presence of an object because it is contextually likely, even when the object is absent. Such unsupported affirmative claims are commonly studied as object hallucinations. POPE formalizes this problem through binary object-presence questions and demonstrates that language and object co-occurrence priors can influence model responses \cite{li2023pope}.
+
+Visual input quality is another potential source of error. Blur can weaken object boundaries and fine details, while additive noise can obscure local evidence. Recent benchmark work evaluates VLMs under families of image corruptions and graded severities, showing that robustness depends on corruption type and severity rather than only on clean-image capability \cite{saxena2026robustbench}. A model that performs well on an unmodified image may therefore behave differently when the same image is degraded.
+
+Prompting is a low-cost intervention that does not require model fine-tuning. In this study, an evidence-based verification prompt explicitly asks the model to check the visible image, avoid assumptions, and answer affirmatively only when the image supports the target object's presence. This is distinct from approaches that provide additional detector outputs or external visual evidence. For example, Visual Evidence Prompting uses outputs from specialist visual models to supply complementary evidence to an LVLM \cite{li2025vep}. Here, the model receives only the original image and a changed instruction.
+
+We conduct a controlled comparison using the POPEv2 paired normal/counterfactual benchmark. POPEv2 is particularly relevant because counterfactual images are constructed by masking target objects, creating object-absent examples that can reveal affirmative hallucinations \cite{li2026popev2}. We vary blur and Gaussian noise, hold the evaluated model and task format constant, and compare standard prompting with evidence-based verification prompting. Our focus is not to claim a universal mitigation method, but to measure the effect and trade-offs of this instruction under controlled image degradation.
+
+The principal contributions are: (1) a paired evaluation of standard and evidence-based verification prompts across five image conditions; (2) a separate analysis of false-positive behavior on counterfactual images and false-negative behavior on normal images; (3) example-clustered statistical comparisons that preserve repeated observations from each benchmark example; and (4) a supplementary metadata-based error-prediction experiment whose limitations are explicitly distinguished from image-content-based hallucination detection.
+
+\section{Related Work}
+\subsection{Object Hallucination Benchmarks}
+Li et al. introduced POPE to evaluate object hallucination through binary questions about object presence, highlighting the influence of language priors and object co-occurrence \cite{li2023pope}. HallusionBench broadens image-context evaluation to include both language hallucination and visual illusion, using controlled question pairs to diagnose reasoning failures \cite{guan2024hallusion}. POPEv2 adds paired normal and counterfactual images, including examples in which objects are masked, and investigates training-related biases in object-presence predictions \cite{li2026popev2}. The present work uses the released 500-row paired POPEv2 test split rather than claiming to reproduce the full POPEv2 paper's broader model evaluation.
+
+\subsection{Visual Robustness and Corruption}
+Image-corruption robustness is an established concern in computer vision. For VLMs, VLM-RobustBench evaluates multiple corruption families, including blur and noise, across severity levels and different model families \cite{saxena2026robustbench}. Its broader scope motivates testing both corruption type and severity. Our experiment is narrower: it isolates Gaussian blur and additive Gaussian noise at two levels, using paired object-presence questions and one VLM.
+
+\subsection{Prompt-Based Hallucination Mitigation}
+Prompt instructions can influence how a VLM weighs visual evidence against linguistic expectations. Recent work on Visual Evidence Prompting reduces hallucinations by supplying outputs from specialist visual models as additional evidence \cite{li2025vep}. Other work explores verification and correction during generation, including retrospective verification frameworks \cite{wu2025reverse}. The present method is intentionally simpler: it changes only the textual instruction and does not add an external detector, retrieval system, or model-side verifier. Its contribution is therefore an empirical test of a lightweight instruction under controlled degradation, not a new general-purpose verification architecture.
+
+\section{Research Questions}
+The study is organized around the following research questions, retained in their approved wording:
+\begin{enumerate}[label=\textbf{RQ\arabic*:}]
+\item How do different types and severity levels of image degradation affect hallucination rates in vision-language models?
+\item Does evidence-based verification prompting reduce unsupported visual claims compared with standard prompting?
+\item Does the effectiveness of verification prompting vary with image quality?
+\item Does verification reduce hallucinations without significantly reducing the retention of correct visual details?
+\end{enumerate}
+For this binary object-presence task, an unsupported visual claim is operationalized as a predicted ``Yes'' on a counterfactual image whose ground-truth label is ``No.'' Retention of the queried object on normal images is assessed using the false-negative rate. This is a task-specific proxy; it does not measure retention of every visual detail in a free-form description.
+
+\section{Dataset and Experimental Design}
+\subsection{POPEv2 Test Split}
+We use the \texttt{Monosail/POPEv2} dataset's \texttt{test} split, containing 500 unique paired examples. Each row includes an example identifier, image identifier, target object, binary question, a normal image and label, and a counterfactual image and label. The normal image represents an object-present case (label ``Yes''), while the paired counterfactual image represents an object-absent case (label ``No''). The released dataset card describes the paired-image structure and the 500-row test file \cite{popev2dataset}. Thus, the source set contains 1,000 images: 500 normal and 500 counterfactual.
+
+Each source image is evaluated under five conditions, resulting in 1,000 $\times$ 5 = 5,000 image-condition instances. Each instance is paired with two prompt types, producing 10,000 model predictions. The experiment contains 5,000 standard-prompt and 5,000 verification-prompt records, with 2,000 records per image condition.
+
+\subsection{Image Degradation}
+The five image conditions are: (i) original, with no added corruption; (ii) mild blur, using PIL Gaussian blur radius 1.2; (iii) severe blur, using radius 3.0; (iv) mild Gaussian noise, using zero-mean additive noise with standard deviation $\sigma=10$; and (v) severe Gaussian noise, using $\sigma=25$. Noise is sampled independently using a deterministic NumPy random generator seeded by the source-example index, image type, and condition index. Pixel values are clipped to the valid 8-bit range before saving. The same degradation procedure is applied to normal and counterfactual images. The paired structure is important for interpretation: each example contributes one normal and one counterfactual source image, and each of those images appears in all five conditions. The resulting observations are therefore repeated measurements, not 10,000 independent examples. The example identifier is retained throughout the prediction table so that prompt comparisons can be paired and uncertainty can be estimated at the example level. The regenerated manifest files preserve the example metadata and the five condition labels; they do not change the original prediction records used for the reported results.
+
+\begin{table}[t]
+\caption{Image Conditions Used in the Experiment}
+\label{tab:conditions}
+\centering
+\footnotesize
+\begin{tabular}{lll}
+\toprule
+Condition & Transformation & Parameter \\
+\midrule
+Original & None & -- \\
+Mild blur & Gaussian blur & radius 1.2 \\
+Severe blur & Gaussian blur & radius 3.0 \\
+Mild noise & Additive Gaussian noise & $\sigma=10$ \\
+Severe noise & Additive Gaussian noise & $\sigma=25$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Model and Inference Configuration}
+The evaluated model is Qwen2.5-VL-3B-Instruct \cite{bai2025qwen}. It was loaded in Google Colab on an NVIDIA Tesla T4 GPU with 4-bit NF4 quantization, FP16 computation, and double quantization. Generation used deterministic decoding (sampling disabled) and a maximum of 16 new tokens. The same model and inference configuration were used for both prompt conditions. The experiment evaluates one model only; findings should not be generalized to other VLM families without further testing.
+
+\section{Methodology}
+\subsection{Prompt Conditions}
+The standard prompt appends the instruction: ``Answer only Yes or No based on the image.'' The verification prompt appends: ``Verify your answer against the visible image evidence. Do not rely on assumptions or typical context. Answer Yes only if the image supports the presence of the target object. Otherwise, answer No. Respond with only Yes or No.'' The question itself is identical across the two prompt conditions.
+
+The model output is normalized using a fixed parser. Responses beginning with ``Yes'' are classified as Yes; responses beginning with ``No'' are classified as No; all other responses are classified as Unclear. The parser is applied identically to both conditions. Six responses in each prompt condition were classified as Unclear, giving 99.88\% coverage for both.
+
+\subsection{Evaluation Metrics}
+For valid Yes/No responses, we calculate accuracy, precision, recall, F1-score, false-positive rate (FPR), and false-negative rate (FNR). Here, positive denotes the presence of the queried object. Accordingly, a false positive is a ``Yes'' prediction on an object-absent counterfactual image; a false negative is a ``No'' prediction on an object-present normal image. Valid-answer accuracy excludes Unclear responses. All-record accuracy counts Unclear responses as incorrect and divides correct responses by all assigned records. FPR and FNR in the descriptive prompt-metric tables use valid binary answers as their denominators:
+\begin{equation}
+\mathrm{FPR}=\frac{FP}{FP+TN},\qquad
+\mathrm{FNR}=\frac{FN}{FN+TP}.
+\end{equation}
+
+For the paired statistical analysis, false-positive and false-negative incidence are defined per assigned counterfactual or normal trial, respectively, with Unclear counted as neither a false positive nor a false negative. These incidence differences therefore use all assigned trials in the relevant image type as the denominator, rather than only valid answers. This distinction explains small differences between descriptive FPR/FNR changes and statistical incidence differences.
+
+\subsection{Paired Statistical Analysis}
+Prompt predictions are paired within each example, image type, and image condition. For each outcome, the verification-minus-standard difference is first computed for each paired trial. Trial differences are then averaged within each of the 500 example IDs, producing one cluster-level difference per example. We apply a two-sided sign-flip permutation test to these 500 example-level differences using 100,000 Monte Carlo permutations. The 95\% confidence intervals are percentile cluster-bootstrap intervals from 10,000 resamples of example IDs. Five condition-specific counterfactual false-positive tests are adjusted using the Holm procedure.
+
+The reported permutation value of 0.00001 is the minimum attainable Monte Carlo estimate under the implemented plus-one correction, $1/(100000+1)$; it is not an exact probability of zero. The three primary tests are also Holm-adjusted in the interpretation below. The analysis assumes that example-level differences are exchangeable under sign flips; the test is not a McNemar test and should not be described as one. The bootstrap resamples examples, rather than individual image-condition rows, to preserve the within-example dependence induced by paired images and repeated corruption conditions. The inferential target is the mean within-example prompt difference for this benchmark sample. Since the benchmark contains a fixed set of examples and one model, the confidence intervals quantify sampling variability under the cluster-resampling scheme; they do not represent variation across model families or across independently collected datasets.
+
+\section{Results and Discussion}
+\subsection{Overall Prompt Comparison}
+Table~\ref{tab:overall} presents the overall results. Verification increases all-record accuracy by 2.08 percentage points, from 87.72\% to 89.80\%. Valid-answer accuracy increases from 87.83\% to 89.91\%. The valid-answer FPR decreases by 5.97 percentage points (16.84\% to 10.87\%), while FNR increases by 1.80 percentage points (7.52\% to 9.32\%). The F1-score increases from 0.8838 to 0.9000. Coverage is unchanged at 99.88\%.
+
+\begin{table}[t]
+\caption{Overall Performance by Prompt Type}
+\label{tab:overall}
+\centering
+\footnotesize
+\begin{tabular}{lrr}
+\toprule
+Metric & Standard & Verification \\
+\midrule
+All-record accuracy (\%) & 87.72 & 89.80 \\
+Valid-answer accuracy (\%) & 87.83 & 89.91 \\
+Precision & 0.8463 & 0.8932 \\
+Recall & 0.9248 & 0.9068 \\
+F1-score & 0.8838 & 0.9000 \\
+FPR (valid answers, \%) & 16.84 & 10.87 \\
+FNR (valid answers, \%) & 7.52 & 9.32 \\
+Coverage (\%) & 99.88 & 99.88 \\
+False positives (count) & 420 & 271 \\
+False negatives (count) & 188 & 233 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The reduction from 420 to 271 false positives corresponds to 149 fewer affirmative errors on object-absent records, approximately a 35.5\% reduction in the count. However, false negatives rise from 188 to 233. The evidence-based instruction therefore makes affirmative claims more conservative, reducing unsupported ``Yes'' responses while also rejecting some object-present examples. This trade-off is central to interpreting RQ2 and RQ4.
+
+To make the paired change more interpretable, we also inspected answer transitions for the same example, image type, and condition. Among counterfactual trials, 156 standard-prompt ``Yes'' responses changed to verification ``No'', while seven changed in the opposite direction. The remaining paired counterfactual predictions were unchanged, including six Unclear-to-Unclear pairs. This asymmetry accounts for the net reduction of 149 false positives. On normal images, 48 standard-prompt ``Yes'' responses changed to verification ``No'', whereas only three standard-prompt ``No'' responses changed to verification ``Yes''. The net increase of 45 false negatives therefore reflects a conservative shift that also affects some object-present cases.
+
+\begin{table}[t]
+\caption{Paired Answer Transitions Across All Conditions}
+\label{tab:transitions}
+\centering
+\footnotesize
+\begin{tabular}{lrr}
+\toprule
+Transition & Counterfactual & Normal \\
+\midrule \\
+Standard Yes $\rightarrow$ Verification No & 156 & 48 \\
+Standard No $\rightarrow$ Verification Yes & 7 & 3 \\
+Net change in FP/FN count & $-149$ FP & $+45$ FN \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For the paired incidence analysis, the verification-minus-standard difference in overall correctness is +2.08 percentage points (95\% CI [1.44, 2.76], Monte Carlo $p=0.00001$). Counterfactual false-positive incidence changes by $-5.96$ percentage points (95\% CI [$-7.16$, $-4.84$], $p=0.00001$), and normal-image false-negative incidence changes by +1.80 percentage points (95\% CI [1.20, 2.44], $p=0.00001$). Applying Holm correction to these three primary tests gives adjusted $p$-values of approximately 0.00003 for each comparison. The estimates indicate a statistically detectable improvement in aggregate correctness and lower false-positive incidence, alongside a statistically detectable increase in false-negative incidence. Table~\ref{tab:pairedstats} consolidates the paired estimates. The false-positive and false-negative outcomes are incidence measures over assigned trials, not the valid-answer FPR and FNR shown in Table~\ref{tab:overall}.
+
+\begin{table*}[t]
+\caption{Paired Example-Level Statistical Comparisons}
+\label{tab:pairedstats}
+\centering
+\footnotesize
+\begin{tabular}{lrrrr}
+\toprule
+Outcome & Difference (pp) & 95\% CI & Monte Carlo $p$ & Adjusted $p$ \\
+\midrule
+Overall correctness & +2.08 & [1.44, 2.76] & 0.00001 & 0.00003$^{a}$ \\
+Counterfactual FP incidence & $-5.96$ & [$-7.16$, $-4.84$] & 0.00001 & 0.00003$^{a}$ \\
+Normal-image FN incidence & +1.80 & [1.20, 2.44] & 0.00001 & 0.00003$^{a}$ \\
+Original: counterfactual FP & $-5.60$ & [$-7.80$, $-3.60$] & 0.00001 & 0.00005$^{b}$ \\
+Mild blur: counterfactual FP & $-5.40$ & [$-7.40$, $-3.60$] & 0.00001 & 0.00005$^{b}$ \\
+Severe blur: counterfactual FP & $-10.00$ & [$-12.80$, $-7.40$] & 0.00001 & 0.00005$^{b}$ \\
+Mild noise: counterfactual FP & $-4.00$ & [$-6.00$, $-2.20$] & 0.00002 & 0.00005$^{b}$ \\
+Severe noise: counterfactual FP & $-4.80$ & [$-7.00$, $-2.80$] & 0.00001 & 0.00005$^{b}$ \\
+\multicolumn{5}{l}{\footnotesize $^{a}$ Holm adjustment across the three primary tests, computed from reported Monte Carlo $p$-values.}\\
+\multicolumn{5}{l}{\footnotesize $^{b}$ Holm-adjusted values as reported for the five condition-specific tests.}\\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Results Across Image Conditions}
+Table~\ref{tab:condition} reports accuracy, FPR, and FNR for each condition. Severe blur produces the lowest accuracy under both prompts (82.50\% standard and 85.20\% verification) and the highest standard-prompt FPR (21.80\%). Severe noise also increases the standard-prompt FPR relative to the original condition, but the pattern is not strictly monotonic across corruption severity: mild noise has an FPR of 15.00\%, close to the original condition's 15.03\%, while severe noise reaches 18.20\%. The results therefore suggest corruption-specific effects rather than a single uniform severity curve. Accuracy and hallucination-related error rates also answer different questions. Accuracy combines object-present and object-absent decisions, whereas counterfactual false-positive incidence isolates unsupported affirmative responses. For example, severe blur reduces accuracy substantially, but verification still improves accuracy and lowers false-positive incidence in that condition. At the same time, its FNR rises, showing that fewer unsupported affirmations do not necessarily mean more complete recognition of present objects. Reporting both error directions is consequently necessary to avoid overstating the mitigation effect.
+
+\begin{table*}[t]
+\caption{Accuracy and Error Rates Across Image Conditions}
+\label{tab:condition}
+\centering
+\footnotesize
+\begin{tabular}{lrrrrrr}
+\toprule
+& \multicolumn{2}{c}{All-record accuracy (\%)} & \multicolumn{2}{c}{FPR (\%)} & \multicolumn{2}{c}{FNR (\%)} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+Condition & Standard & Verification & Standard & Verification & Standard & Verification \\
+\midrule
+Original & 89.70 & 92.10 & 15.03 & 9.42 & 5.40 & 6.20 \\
+Mild blur & 89.60 & 91.30 & 14.14 & 8.69 & 5.80 & 7.80 \\
+Severe blur & 82.50 & 85.20 & 21.80 & 11.80 & 13.20 & 17.80 \\
+Mild noise & 89.80 & 91.50 & 15.00 & 11.00 & 5.40 & 6.00 \\
+Severe noise & 87.00 & 88.90 & 18.20 & 13.40 & 7.80 & 8.80 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+Verification improves all-record accuracy in all five conditions, with gains ranging from 1.50 to 2.70 percentage points. It also lowers FPR in every condition. The largest condition-specific FPR-incidence reduction is observed under severe blur (verification-minus-standard $=-10.0$ percentage points; 95\% CI [$-12.8$, $-7.4$]). The reductions are $-5.6$ points for original images, $-5.4$ for mild blur, $-4.0$ for mild noise, and $-4.8$ for severe noise. All five condition-specific tests are reported as significant after Holm adjustment in the supplied analysis (adjusted $p=0.00005$ for each). These results support a consistent reduction in false-positive incidence across the tested conditions, with the largest observed reduction under severe blur.
+
+FNR increases under verification in all five conditions. The largest increase is under severe blur (13.20\% to 17.80\%), where the input may make positive evidence harder to recognize. Thus, verification does not simply improve all forms of recognition; it changes the decision balance. In relation to RQ1, severe blur is the most challenging tested condition for accuracy and false-positive behavior, while noise effects depend on the selected noise level. In relation to RQ3, the magnitude of the false-positive reduction varies by condition, but no formal prompt-by-condition interaction test was conducted. The observed variation is descriptive and should not be interpreted as proof of a statistically significant interaction.
+
+\subsection{Interpretation of the Research Questions}
+\textbf{RQ1:} Degradation is associated with changes in object-presence performance. Severe blur yields the lowest accuracy and highest standard-prompt FPR. Gaussian noise also affects performance, but the mild-to-severe pattern is not strictly monotonic. The experiment supports condition-dependent sensitivity, not a universal monotonic degradation law.
+
+\textbf{RQ2:} Yes, within this model and benchmark, evidence-based verification reduces unsupported affirmative claims. Counterfactual false-positive incidence falls by 5.96 percentage points overall, and the false-positive count falls from 420 to 271. Aggregate accuracy also improves by 2.08 points.
+
+\textbf{RQ3:} The observed size of the reduction varies across image conditions, with the largest reduction under severe blur. However, the study did not perform a formal interaction test between prompt type and image condition. We therefore report descriptive heterogeneity rather than a confirmed interaction effect.
+
+\textbf{RQ4:} The evidence does not support an unqualified ``yes.'' Verification reduces false positives but increases false negatives by 1.80 percentage points overall. Because normal-image false negatives are only a binary proxy for failure to retain the queried object, the experiment cannot establish whether all correct visual details are retained. The result instead indicates a measurable conservatism trade-off. The binary question format also limits what can be inferred from a correct answer: a correct ``Yes'' establishes that the queried object was detected, but does not verify its attributes, count, location, or relation to other objects. Conversely, a correct ``No'' on a counterfactual image is evidence against the specific object hallucination measured here, not proof that the model has avoided every possible unsupported visual statement. These boundaries are important when relating the operational outcomes to the broader concept of visual hallucination.
+
+\subsection{Exploratory Metadata-Based Error Prediction}
+A supplementary classifier experiment treated each prediction as correct or incorrect (including Unclear as an error) and used only condition, prompt type, target-object text, and question text. Ground-truth labels, model predictions, image paths, image type, and example IDs were excluded from the feature set. Text was represented with TF--IDF (maximum 3,000 features; unigrams and bigrams), and condition and prompt type were one-hot encoded. A group-based 80:20 split separated 400 training examples (8,000 records) from 100 held-out examples (2,000 records), with no example-ID overlap.
+
+On the held-out set, logistic regression achieved 0.6245 accuracy, 0.5587 error-class recall, 0.2687 F1, and 0.6366 ROC-AUC. Random forest achieved 0.6855 accuracy, 0.4413 recall, 0.2574 F1, and 0.6116 ROC-AUC. The soft-voting classifier had the highest accuracy (0.8005) but only 0.1943 recall for the error class. Five-fold stratified group cross-validation produced a higher error-class F1 for logistic regression (0.2489) than random forest (0.2416). These modest results are affected by class imbalance: only 1,124 of 10,000 records (11.24\%) were labelled as errors. Table~\ref{tab:ml} summarizes the held-out results for all four classifiers. The voting classifier illustrates why accuracy alone is inadequate for this imbalanced target: it has the highest accuracy but the lowest error-class recall. More importantly, this is metadata-and-question-text prediction, not image-content analysis and not a hallucination-specific detector. It is included only as exploratory supplementary analysis and does not underpin the primary findings.
+
+\begin{table}[t]
+\caption{Exploratory Error-Classification Results on the Held-Out Set}
+\label{tab:ml}
+\centering
+\footnotesize
+\begin{tabular}{lrrrr}
+\toprule
+Classifier & Acc. & Err. recall & Err. F1 & ROC-AUC \\
+\midrule
+Logistic regression & 0.6245 & 0.5587 & 0.2687 & 0.6366 \\
+Random forest & 0.6855 & 0.4413 & 0.2574 & 0.6116 \\
+Linear SVM & 0.6235 & 0.5142 & 0.2522 & 0.5873 \\
+Soft voting & 0.8005 & 0.1943 & 0.1939 & 0.6297 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The logistic-regression model has the strongest held-out error recall and F1 among these four classifiers, but its error-class precision is only 0.1769. The five-fold grouped cross-validation results are consistent with the same modest ranking: logistic regression obtains F1=0.2489 and ROC-AUC=0.6312, compared with F1=0.2416 and ROC-AUC=0.6224 for random forest. Threshold selection using training out-of-fold predictions produced only small changes and did not improve held-out F1 for logistic regression (0.2687 at the default threshold versus 0.2674 at the selected threshold). These observations reinforce that metadata features alone are insufficient for dependable prediction of individual model errors.
+
+\section{Limitations and Future Work}
+Several limitations bound the interpretation. First, only Qwen2.5-VL-3B-Instruct was evaluated, so the findings cannot be generalized to other model sizes or VLM families. Second, POPEv2 measures binary object presence on a fixed set of 500 paired examples; it does not cover attributes, relations, counting, scene descriptions, or open-ended explanations. Third, the tested corruptions are limited to two Gaussian blur levels and two additive Gaussian-noise levels. Other distortions, such as motion blur, compression, occlusion, lighting changes, and geometric transformations, remain untested. Fourth, the verification prompt is a single fixed instruction; different wording, chain-of-thought policies, or calibrated abstention mechanisms may produce different outcomes. Fifth, the FNR proxy captures only whether the queried target is missed, not the retention of all correct visual details. Finally, the supplementary classifier uses metadata and question text rather than image pixels, and its low error-class precision limits its practical use.
+
+Future work should evaluate multiple VLM families and model scales, increase the number and diversity of paired examples, and test additional corruption families with controlled severity. A formal prompt-by-condition interaction analysis should be pre-registered and reported alongside paired effect sizes. Further experiments should examine calibration and abstention, including whether a model can explicitly defer when the image is insufficiently clear instead of forcing a Yes/No decision. More comprehensive visual-detail retention measures could include object attributes, spatial relations, and human-verified evidence annotations. Finally, image-aware error predictors and external evidence systems could be compared against prompt-only verification under the same paired protocol.
+
+\balance
+\begin{thebibliography}{00}
+\bibitem{li2023pope}
+Y. Li, Y. Du, K. Zhou, J. Wang, W. X. Zhao, and J.-R. Wen, ``Evaluating object hallucination in large vision-language models,'' in \emph{Proc. 2023 Conf. Empirical Methods in Natural Language Processing (EMNLP)}, 2023, pp. 292--305, doi: 10.18653/v1/2023.emnlp-main.20.
+
+\bibitem{li2026popev2}
+Y. Li, K. Zhou, X. Zhao, L. Fang, and J.-R. Wen, ``Analyzing and mitigating object hallucination: A training bias perspective,'' in \emph{Proc. AAAI Conf. Artificial Intelligence}, vol. 40, no. 8, 2026, pp. 6636--6643, doi: 10.1609/aaai.v40i8.37594.
+
+\bibitem{popev2dataset}
+Monosail, ``POPEv2 dataset,'' Hugging Face Datasets, 2026. [Online]. Available: \url{https://huggingface.co/datasets/Monosail/POPEv2}. Accessed: Nov. 15, 2026.
+
+\bibitem{guan2024hallusion}
+T. Guan \emph{et al.}, ``HallusionBench: An advanced diagnostic suite for entangled language hallucination and visual illusion in large vision-language models,'' in \emph{Proc. IEEE/CVF Conf. Computer Vision and Pattern Recognition (CVPR)}, 2024, pp. 14375--14385, doi: 10.1109/CVPR52733.2024.01363.
+
+\bibitem{bai2025qwen}
+S. Bai \emph{et al.}, ``Qwen2.5-VL technical report,'' arXiv:2502.13923, 2025.
+
+\bibitem{li2025vep}
+W. Li, Z. Huang, H. Li, L. Lu, Y. Lu, X. Tian, X. Shen, and J. Ye, ``Visual evidence prompting mitigates hallucinations in large vision-language models,'' in \emph{Proc. 63rd Annu. Meeting Assoc. Comput. Linguistics (ACL)}, vol. 1, 2025, pp. 4048--4080, doi: 10.18653/v1/2025.acl-long.205.
+
+\bibitem{saxena2026robustbench}
+R. Saxena, A. Suglia, and P. Minervini, ``VLM-RobustBench: A comprehensive benchmark for robustness of vision-language models,'' in \emph{Proc. 43rd Int. Conf. Machine Learning}, Proc. Mach. Learn. Res., vol. 306, 2026, pp. 108038--108077.
+
+\bibitem{wu2025reverse}
+T.-H. Wu, H. Lee, J. Ge, J. E. Gonzalez, T. Darrell, and D. Chan, ``Generate, but verify: Reducing hallucination in vision-language models with retrospective resampling,'' in \emph{Advances in Neural Information Processing Systems}, vol. 38, 2025.
+\end{thebibliography}
+
+\end{document}
