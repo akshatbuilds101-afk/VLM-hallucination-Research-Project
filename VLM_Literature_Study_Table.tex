@@ -1,0 +1,65 @@
+\documentclass[conference]{IEEEtran}
+\usepackage[T1]{fontenc}
+\usepackage{cite}
+\usepackage{booktabs,array}
+\usepackage[hidelinks]{hyperref}
+
+\title{Literature Study Table}
+\author{\IEEEauthorblockN{Akshat Sajwal, Sameer Mishra, Rakshit Kumar Jha, Ananya Gupta, Ayush NA}
+\IEEEauthorblockA{School of Computer Science\\University of Petroleum and Energy Studies (UPES)\\Dehradun, India}}
+
+\begin{document}
+\maketitle
+
+\section{Literature Review}
+Previous studies have examined object hallucination, visual reasoning errors, and the effect of image corruption on vision-language models. Table~\ref{tab:literature} summarises selected studies related to this research.
+
+\begin{table*}[!t]
+\caption{SUMMARY OF RELATED LITERATURE}
+\label{tab:literature}
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{1.18}
+\begin{tabular}{p{0.17\textwidth}p{0.25\textwidth}p{0.27\textwidth}p{0.23\textwidth}}
+\toprule
+\textbf{Study} & \textbf{Focus and method} & \textbf{Main contribution} & \textbf{Relevance to this study}\\
+\midrule
+Li \emph{et al.} (2023) \cite{pope} &
+Introduced POPE, a polling-based evaluation method that asks whether an object is present in an image. &
+Showed that LVLMs can produce object hallucinations and that question design can affect evaluation. &
+Supports the use of object-presence questions and false-positive measurement.\\
+
+Guan \emph{et al.} (2024) \cite{hallusion} &
+Introduced HallusionBench to evaluate visual reasoning errors, language hallucination, and visual illusion. &
+Provided a diagnostic benchmark with controlled questions and analysis of different model failure types. &
+Shows the need to evaluate whether model answers are supported by image evidence.\\
+
+Usama \emph{et al.} (2025) \cite{corruptions} &
+Studied VLM performance under common image corruptions, including blur, noise, weather, and digital distortions. &
+Reported that different corruptions affect visual tasks in different ways. &
+Supports testing image degradation; this study focuses on blur and Gaussian noise and measures hallucination errors.\\
+
+Bai \emph{et al.} (2025) \cite{qwen} &
+Presented the Qwen2.5-VL model family and its visual-language capabilities. &
+Described the model architecture, training, and evaluation of Qwen2.5-VL. &
+Provides background for the selected Qwen2.5-VL-3B-Instruct model.\\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+The reviewed studies provide evaluation methods for hallucination and visual reasoning, and show that image corruption can affect VLM performance. This research combines these areas by comparing standard prompting and evidence-based verification prompting under controlled blur and Gaussian-noise conditions.
+
+\begin{thebibliography}{00}
+\bibitem{pope}
+Y. Li, Y. Du, K. Zhou, J. Wang, W. X. Zhao, and J.-R. Wen, ``Evaluating Object Hallucination in Large Vision-Language Models,'' in \emph{Proc. EMNLP}, 2023, pp. 292--305.
+
+\bibitem{hallusion}
+T. Guan \emph{et al.}, ``HallusionBench: An Advanced Diagnostic Suite for Entangled Language Hallucination and Visual Illusion in Large Vision-Language Models,'' in \emph{Proc. IEEE/CVF CVPR}, 2024, pp. 14375--14385.
+
+\bibitem{corruptions}
+M. Usama, S. A. Asim, S. B. Ali, S. T. Wasim, and U. B. Mansoor, ``Analysing the Robustness of Vision-Language-Models to Common Corruptions,'' arXiv:2504.13690, 2025.
+
+\bibitem{qwen}
+S. Bai \emph{et al.}, ``Qwen2.5-VL Technical Report,'' arXiv:2502.13923, 2025.
+\end{thebibliography}
+\end{document}
